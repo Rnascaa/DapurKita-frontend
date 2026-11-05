@@ -1,0 +1,38 @@
+{
+  "name": "dapurkita-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty",
+    "generate:api": "openapi-typescript ./openapi.yaml -o ./src/api/generated/openapi.ts",
+    "prepare": "msw init public/ --save"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.15.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.10",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.0",
+    "autoprefixer": "^10.4.21",
+    "msw": "^2.10.0",
+    "openapi-typescript": "^7.8.0",
+    "postcss": "^8.5.4",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
+  }
+}

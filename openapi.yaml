@@ -1,0 +1,680 @@
+openapi: 3.0.3
+info:
+  title: DapurKita API
+  version: 2.3.1
+  description: |
+    Kontrak REST API DapurKita (MVP), identik dengan DapurKita_API_Handoff_v2.3.pdf, dengan perubahan v2.3.1 di bawah.
+    Status: disetujui PM. Sejak v2.3, file ini menjadi acuan integrasi.
+
+    Konvensi: base path `/api/v1`, JSON camelCase, tanggal ISO-8601 UTC, field nullable
+    selalu dikirim eksplisit sebagai `null`, pagination `page` mulai dari 1.
+    Cabangkan logika error berdasarkan `code`, bukan `message`.
+
+    Changelog v2.3.1 (disetujui PM): pencocokan parameter `ingredient` berubah dari substring
+    menjadi pencocokan di awal kata, agar "ayam" tidak cocok dengan "bayam". Hanya deskripsi
+    yang berubah; endpoint, field, dan struktur response tidak berubah.
+servers:
+  - url: /api/v1
+    description: Same-origin lewat reverse proxy (dev memakai Vite proxy ke http://localhost:8080)
+tags:
+  - name: Auth
+  - name: User
+  - name: Category
+  - name: Recipe
+  - name: Favorite
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      operationId: register
+      summary: Registrasi user baru (role selalu USER)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+            example: { name: Siti, email: siti@mail.com, password: rahasia123 }
+      responses:
+        '201':
+          description: Terdaftar dan langsung login. Refresh token dikirim sebagai cookie HttpOnly.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/RefreshCookie' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409':
+          description: Email sudah terdaftar (`EMAIL_ALREADY_EXISTS`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example:
+                status: 409
+                code: EMAIL_ALREADY_EXISTS
+                message: Email sudah terdaftar
+                path: /api/v1/auth/register
+                timestamp: '2026-11-03T08:00:00Z'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+            example: { email: siti@mail.com, password: rahasia123 }
+      responses:
+        '200':
+          description: Berhasil. Refresh token dikirim sebagai cookie HttpOnly.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/RefreshCookie' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401':
+          description: Email atau password salah (`INVALID_CREDENTIALS`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example:
+                status: 401
+                code: INVALID_CREDENTIALS
+                message: Email atau password salah
+                path: /api/v1/auth/login
+                timestamp: '2026-11-03T08:00:00Z'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshToken
+      summary: Tukar refresh token (cookie) dengan access token baru
+      description: |
+        Tanpa body. Cookie `refreshToken` terkirim otomatis (wajib `withCredentials`).
+        Refresh token berotasi: token lama dicabut dan cookie baru dikirim.
+        401 saat aplikasi dimuat berarti user anonim, bukan error.
+      security:
+        - refreshCookie: []
+      responses:
+        '200':
+          description: Access token baru dan cookie refresh baru
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/RefreshCookie' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Cabut refresh token dan hapus cookie
+      security:
+        - refreshCookie: []
+      responses:
+        '204':
+          description: Berhasil, cookie dihapus
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /users/me:
+    get:
+      tags: [User]
+      operationId: getMe
+      summary: Profil sendiri
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      tags: [User]
+      operationId: updateMe
+      summary: Ubah nama profil
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProfileRequest' }
+            example: { name: Siti Aminah }
+      responses:
+        '200':
+          description: Profil terbaru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /users/me/favorites:
+    get:
+      tags: [User]
+      operationId: listMyFavorites
+      summary: Koleksi resep favorit sendiri
+      description: Item berupa RecipeSummary dengan `isFavorited` selalu `true`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Halaman favorit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecipePage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /categories:
+    get:
+      tags: [Category]
+      operationId: listCategories
+      summary: Daftar kategori (seed data)
+      description: Array biasa tanpa pagination. Tidak ada endpoint tambah, ubah, atau hapus.
+      security: []
+      responses:
+        '200':
+          description: Daftar kategori
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Category' }
+              example:
+                - { id: 1, name: Makanan Utama, slug: makanan-utama }
+                - { id: 2, name: Lauk, slug: lauk }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /recipes:
+    get:
+      tags: [Recipe]
+      operationId: listRecipes
+      summary: Cari dan daftar resep
+      description: |
+        Publik. Jika header Authorization dikirim, `isFavorited` terisi sesuai user.
+        Tanpa token, `isFavorited` bernilai `false`.
+        Parameter `ingredient` boleh diulang dengan logika AND (semua bahan harus cocok).
+        Pencocokan bahan di awal kata, tanpa membedakan huruf besar/kecil: `ayam` cocok dengan
+        "Daging ayam" dan "Ayam kampung", tetapi tidak dengan "Bayam"; `sant` cocok dengan "Santan".
+      security:
+        - {}
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          description: Kata kunci judul
+          schema: { type: string }
+        - name: categoryId
+          in: query
+          description: Filter satu kategori
+          schema: { type: integer, format: int64 }
+        - name: ingredient
+          in: query
+          description: Nama bahan. Ulangi parameter untuk beberapa bahan (AND).
+          style: form
+          explode: true
+          schema:
+            type: array
+            items: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Halaman resep. Hasil kosong tetap 200 dengan `content` kosong.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecipePage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Recipe]
+      operationId: createRecipe
+      summary: Buat resep (ADMIN)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecipeRequest' }
+            example:
+              title: Rendang Sapi
+              description: Rendang khas Minang
+              imageUrl: https://example.com/rendang.jpg
+              cookingTimeMinutes: 180
+              servings: 6
+              categoryId: 2
+              ingredients:
+                - { name: Daging sapi, quantity: '1', unit: kg }
+                - { name: Garam, quantity: secukupnya, unit: null }
+              instructions:
+                - { description: Haluskan bumbu. }
+                - { description: Masak hingga santan menyusut. }
+      responses:
+        '201':
+          description: Resep dibuat
+          headers:
+            Location:
+              description: URL resep, contoh `/api/v1/recipes/12`
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecipeDetail' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /recipes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/RecipeId'
+    get:
+      tags: [Recipe]
+      operationId: getRecipe
+      summary: Detail resep
+      security:
+        - {}
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Detail resep
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecipeDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    put:
+      tags: [Recipe]
+      operationId: updateRecipe
+      summary: Ubah resep, replace penuh (ADMIN)
+      description: Menggantikan seluruh isi resep, termasuk ingredients dan instructions.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecipeRequest' }
+      responses:
+        '200':
+          description: Resep terbaru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecipeDetail' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [Recipe]
+      operationId: deleteRecipe
+      summary: Hapus resep (ADMIN)
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Terhapus
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /recipes/{id}/favorite:
+    parameters:
+      - $ref: '#/components/parameters/RecipeId'
+    put:
+      tags: [Favorite]
+      operationId: addFavorite
+      summary: Tambah ke favorit (idempoten)
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Berhasil, juga jika sudah favorit
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [Favorite]
+      operationId: removeFavorite
+      summary: Hapus dari favorit (idempoten)
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Berhasil, juga jika belum favorit
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token JWT, berlaku 15 menit. Simpan di memori, bukan localStorage.
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: refreshToken
+      description: Cookie HttpOnly, SameSite=Strict, Path=/api/v1/auth, berlaku 7 hari.
+
+  headers:
+    RefreshCookie:
+      description: >-
+        `refreshToken=...; HttpOnly; Secure (production); SameSite=Strict; Path=/api/v1/auth; Max-Age=604800`
+      schema: { type: string }
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: Nomor halaman, mulai dari 1
+      schema: { type: integer, minimum: 1, default: 1 }
+    Size:
+      name: size
+      in: query
+      description: Jumlah item per halaman
+      schema: { type: integer, minimum: 1, maximum: 50, default: 12 }
+    Sort:
+      name: sort
+      in: query
+      schema:
+        type: string
+        enum: [newest, oldest, title]
+        default: newest
+    RecipeId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+
+  responses:
+    ValidationError:
+      description: |
+        Input tidak valid (`VALIDATION_ERROR`) atau JSON rusak (`MALFORMED_REQUEST`).
+        Termasuk `categoryId` yang tidak ada (`field: categoryId`) dan parameter query di luar batas
+        (`page` kurang dari 1, `size` di luar 1 sampai 50, `sort` tidak dikenal), dengan `field` berisi
+        nama parameter. Backend tidak membulatkan nilai diam-diam.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            status: 400
+            code: VALIDATION_ERROR
+            message: Data tidak valid
+            errors:
+              - { field: title, message: Judul wajib diisi }
+            path: /api/v1/recipes
+            timestamp: '2026-11-03T08:00:00Z'
+    Unauthorized:
+      description: |
+        `TOKEN_EXPIRED` (picu refresh satu kali) atau `UNAUTHORIZED` (akhiri sesi, tanpa refresh).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            status: 401
+            code: TOKEN_EXPIRED
+            message: Token kedaluwarsa
+            path: /api/v1/users/me
+            timestamp: '2026-11-03T08:00:00Z'
+    Forbidden:
+      description: Role tidak cukup, misalnya USER memanggil endpoint ADMIN (`FORBIDDEN`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            status: 403
+            code: FORBIDDEN
+            message: Akses ditolak
+            path: /api/v1/recipes
+            timestamp: '2026-11-03T08:00:00Z'
+    NotFound:
+      description: Resource tidak ada (`NOT_FOUND`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            status: 404
+            code: NOT_FOUND
+            message: Resep tidak ditemukan
+            path: /api/v1/recipes/999
+            timestamp: '2026-11-03T08:00:00Z'
+    TooManyRequests:
+      description: Kena rate limit (`TOO_MANY_REQUESTS`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    InternalError:
+      description: Kesalahan server (`INTERNAL_ERROR`), tanpa stack trace
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [status, code, message, path, timestamp]
+      properties:
+        status: { type: integer, example: 400 }
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - MALFORMED_REQUEST
+            - INVALID_CREDENTIALS
+            - TOKEN_EXPIRED
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - NOT_FOUND
+            - EMAIL_ALREADY_EXISTS
+            - TOO_MANY_REQUESTS
+            - INTERNAL_ERROR
+        message: { type: string }
+        errors:
+          type: array
+          description: Hanya muncul pada `VALIDATION_ERROR`
+          items: { $ref: '#/components/schemas/FieldError' }
+        path: { type: string }
+        timestamp: { type: string, format: date-time }
+
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          description: |
+            Nama field. Field bersarang memakai notasi indeks berkurung dengan indeks mulai dari 0
+            sesuai urutan array yang dikirim.
+          example: 'ingredients[0].name'
+        message: { type: string }
+
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100, description: Di-trim }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 8, maxLength: 72 }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string }
+
+    UpdateProfileRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100, description: Di-trim }
+
+    User:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id: { type: integer, format: int64, example: 1 }
+        name: { type: string, example: Siti }
+        email: { type: string, format: email, example: siti@mail.com }
+        role: { type: string, enum: [USER, ADMIN] }
+
+    AuthResponse:
+      type: object
+      description: Refresh token tidak ada di body, dikirim lewat cookie HttpOnly.
+      required: [accessToken, tokenType, expiresIn, user]
+      properties:
+        accessToken: { type: string, example: eyJ... }
+        tokenType: { type: string, enum: [Bearer] }
+        expiresIn: { type: integer, description: Detik, example: 900 }
+        user: { $ref: '#/components/schemas/User' }
+
+    Category:
+      type: object
+      required: [id, name, slug]
+      properties:
+        id: { type: integer, format: int64, example: 1 }
+        name: { type: string, example: Makanan Utama }
+        slug: { type: string, example: makanan-utama }
+
+    CategoryRef:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: integer, format: int64, example: 2 }
+        name: { type: string, example: Lauk }
+
+    RecipeSummary:
+      type: object
+      required:
+        [id, title, description, imageUrl, cookingTimeMinutes, servings, category, isFavorited, createdAt]
+      properties:
+        id: { type: integer, format: int64, example: 12 }
+        title: { type: string, example: Rendang Sapi }
+        description: { type: string, nullable: true }
+        imageUrl: { type: string, nullable: true, example: 'https://example.com/rendang.jpg' }
+        cookingTimeMinutes: { type: integer, minimum: 1, example: 180 }
+        servings: { type: integer, minimum: 1, example: 6 }
+        category: { $ref: '#/components/schemas/CategoryRef' }
+        isFavorited: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    RecipeDetail:
+      allOf:
+        - $ref: '#/components/schemas/RecipeSummary'
+        - type: object
+          required: [ingredients, instructions, updatedAt]
+          properties:
+            ingredients:
+              type: array
+              items: { $ref: '#/components/schemas/Ingredient' }
+            instructions:
+              type: array
+              items: { $ref: '#/components/schemas/Instruction' }
+            updatedAt: { type: string, format: date-time }
+
+    Ingredient:
+      type: object
+      required: [name, quantity, unit]
+      properties:
+        name: { type: string, example: Daging sapi }
+        quantity:
+          type: string
+          description: Teks, bisa "secukupnya" atau "1/2". Jangan dipaksa menjadi angka.
+          example: '1'
+        unit: { type: string, nullable: true, example: kg }
+
+    Instruction:
+      type: object
+      required: [stepNumber, description]
+      properties:
+        stepNumber: { type: integer, minimum: 1, example: 1 }
+        description: { type: string, example: Haluskan bumbu. }
+
+    RecipeRequest:
+      type: object
+      description: |
+        Urutan bahan dan langkah mengikuti urutan array.
+        Jangan kirim `stepNumber` atau `sortOrder`.
+      required: [title, cookingTimeMinutes, servings, categoryId, ingredients, instructions]
+      properties:
+        title: { type: string, minLength: 3, maxLength: 150 }
+        description: { type: string, nullable: true, maxLength: 2000 }
+        imageUrl:
+          type: string
+          nullable: true
+          format: uri
+          maxLength: 2048
+          description: URL valid dengan skema http atau https
+          pattern: '^https?://'
+        cookingTimeMinutes: { type: integer, minimum: 1 }
+        servings: { type: integer, minimum: 1 }
+        categoryId:
+          type: integer
+          format: int64
+          description: >-
+            Harus ada di daftar kategori. Jika tidak, `400 VALIDATION_ERROR` dengan field `categoryId`.
+        ingredients:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { $ref: '#/components/schemas/IngredientRequest' }
+        instructions:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { $ref: '#/components/schemas/InstructionRequest' }
+
+    IngredientRequest:
+      type: object
+      required: [name, quantity]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        quantity: { type: string, minLength: 1, maxLength: 50 }
+        unit: { type: string, nullable: true, maxLength: 30 }
+
+    InstructionRequest:
+      type: object
+      required: [description]
+      properties:
+        description: { type: string, minLength: 1, maxLength: 2000 }
+
+    RecipePage:
+      type: object
+      required: [content, page, size, totalElements, totalPages, hasNext]
+      properties:
+        content:
+          type: array
+          items: { $ref: '#/components/schemas/RecipeSummary' }
+        page: { type: integer, example: 1 }
+        size: { type: integer, example: 12 }
+        totalElements: { type: integer, format: int64, example: 87 }
+        totalPages: { type: integer, example: 8 }
+        hasNext: { type: boolean, example: true }
