@@ -11,11 +11,20 @@ export type RecipeDraft = {
   instructions: { description: string }[];
 };
 
-const imageUrl = z.string()
+function isParsableUrl(value: string) {
+  try { new URL(value); return true; } catch { return false; }
+}
+
+/** Path hasil POST /images (v2.4.0). */
+export const UPLOADED_IMAGE_PATH = /^\/api\/v1\/images\/[a-f0-9]{32}\.(jpg|png|webp)$/;
+
+/** URL http/https atau foto hasil upload; dipakai resep dan artikel. */
+export const imageUrlSchema = z.string()
   .max(2048, 'URL gambar maksimal 2048 karakter.')
-  .url('URL gambar tidak valid.')
-  .refine((value) => /^https?:\/\//i.test(value), 'URL gambar harus diawali http:// atau https://.')
+  .refine((value) => UPLOADED_IMAGE_PATH.test(value) || (/^https?:\/\//i.test(value) && isParsableUrl(value)),
+    'URL gambar harus diawali http:// atau https://, atau berasal dari unggahan.')
   .nullable();
+const imageUrl = imageUrlSchema;
 
 const positiveInteger = (label: string, unit: string) => z.number({
   required_error: `${label} wajib diisi.`,

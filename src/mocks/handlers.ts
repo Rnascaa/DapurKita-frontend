@@ -3,7 +3,9 @@ import type { components } from '../api/generated/openapi';
 import { API_BASE_URL } from '../api/client';
 import { loginSchema, profileSchema, registerSchema } from '../features/auth/validation';
 import { recipeSchema } from '../features/recipes/validation';
-import { categories, recipes, type RecipeDetail } from './fixtures';
+import { articleSchema, normalizeArticleDraft } from '../features/articles/validation';
+import { commentSchema, reviewSchema } from '../features/community/validation';
+import { articles, categories, comments, recipes, reviews, type ArticleRecord, type CommentRecord, type RecipeDetail, type ReviewRecord } from './fixtures';
 
 type User = components['schemas']['User'];
 type AuthResponse = components['schemas']['AuthResponse'];
@@ -13,7 +15,11 @@ type ErrorResponse = components['schemas']['ErrorResponse'];
 const users = new Map<string, { user: User; password: string }>();
 const refreshTokens = new Map<string, User>();
 const favorites = new Map<number, Set<number>>();
-let nextRecipeId = 4;
+let nextRecipeId = 11;
+let nextArticleId = 6;
+let nextCommentId = 5;
+let nextReviewId = 6;
+const images = new Map<string, Blob>();
 let nextTokenId = 1;
 let tokenExpiredInjected = false;
 let tokenExpiredRefreshUser: User | null = null;
@@ -114,9 +120,44 @@ function recipeSummary(recipe: RecipeDetail, user: User | null) {
     servings: recipe.servings,
     category: recipe.category,
     isFavorited: user ? (favorites.get(user.id)?.has(recipe.id) ?? false) : false,
+    ...ratingOf(recipe.id),
     createdAt: recipe.createdAt,
   };
 }
+
+function ratingOf(recipeId: number) {
+  const items = reviews.filter((review) => review.recipeId === recipeId);
+  if (!items.length) return { ratingAverage: null, ratingCount: 0 };
+  const average = items.reduce((sum, review) => sum + review.rating, 0) / items.length;
+  return { ratingAverage: Math.round(average * 10) / 10, ratingCount: items.length };
+}
+
+function pageSlice<T>(items: T[], page: number, size: number) {
+  const start = (page - 1) * size;
+  return { content: items.slice(start, start + size), page, size, totalElements: items.length, totalPages: Math.ceil(items.length / size), hasNext: start + size < items.length };
+}
+
+function publicReview({ recipeId: _recipeId, ...review }: ReviewRecord) { return review; }
+
+function commentTree(comment: CommentRecord) {
+  const replies = comments.filter((item) => item.parentId === comment.id)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .map((reply) => ({ ...reply, replies: [] }));
+  return { ...comment, replies };
+}
+
+function readingTime(content: string) { return Math.max(1, Math.ceil(content.trim().split(/\s+/).length / 200)); }
+function articleSummary({ content, updatedAt: _updatedAt, ...article }: ArticleRecord) {
+  return { ...article, readingTimeMinutes: readingTime(content) };
+}
+function articlesByDate() { return [...articles].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)); }
+function articleDetail(article: ArticleRecord) {
+  const ordered = articlesByDate();
+  const index = ordered.findIndex((item) => item.id === article.id);
+  const link = (item?: ArticleRecord) => item ? { id: item.id, title: item.title, coverImageUrl: item.coverImageUrl } : null;
+  return { ...articleSummary(article), content: article.content, updatedAt: article.updatedAt, previous: link(ordered[index + 1]), next: link(ordered[index - 1]) };
+}
+function recipeExists(id: number) { return recipes.some((recipe) => recipe.id === id); }
 
 function recipeDetail(recipe: RecipeDetail, user: User | null) {
   return { ...recipeSummary(recipe, user), ingredients: recipe.ingredients, instructions: recipe.instructions, updatedAt: recipe.updatedAt };
@@ -262,7 +303,11 @@ export const handlers = [
     if ('response' in auth) return auth.response;
     const index = recipes.findIndex((item) => item.id === Number(params.id));
     if (index < 0) return error(404, 'NOT_FOUND', 'Resep tidak ditemukan', requestPath(request));
+    const removedId = recipes[index].id;
     recipes.splice(index, 1);
+    for (const list of [comments, reviews] as { recipeId: number }[][]) {
+      for (let i = list.length - 1; i >= 0; i--) if (list[i].recipeId === removedId) list.splice(i, 1);
+    }
     return new HttpResponse(null, { status: 204 });
   }),
   http.put(apiPath('/recipes/:id/favorite'), ({ params, request }) => {
@@ -305,5 +350,181 @@ export const handlers = [
     const ids = favorites.get(auth.user.id) ?? new Set<number>();
     const selected = sortRecipes(recipes.filter((recipe) => ids.has(recipe.id)), paging.sort);
     return HttpResponse.json(pageOf(selected, paging.page, paging.size, auth.user));
+  }),
+
+  // ---- v2.4.0: komentar ----
+  http.get(apiPath('/recipes/:id/comments'), ({ params, request }) => {
+    const path = requestPath(request);
+    const recipeId = Number(params.id);
+    if (!recipeExists(recipeId)) return error(404, 'NOT_FOUND', 'Resep tidak ditemukan', path);
+    const paging = parsePageParams(request, path);
+    if ('response' in paging) return paging.response;
+    const topLevel = comments.filter((item) => item.recipeId === recipeId && item.parentId === null)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(commentTree);
+    return HttpResponse.json({ ...pageSlice(topLevel, paging.page, paging.size), totalComments: comments.filter((item) => item.recipeId === recipeId).length });
+  }),
+  http.post(apiPath('/recipes/:id/comments'), async ({ params, request }) => {
+    const path = requestPath(request);
+    const auth = requireUser(request, path);
+    if ('response' in auth) return auth.response;
+    const recipeId = Number(params.id);
+    if (!recipeExists(recipeId)) return error(404, 'NOT_FOUND', 'Resep tidak ditemukan', path);
+    const body = await request.json() as { content?: unknown; parentId?: unknown };
+    const parsed = commentSchema.safeParse({ content: body.content, parentId: body.parentId ?? null });
+    if (!parsed.success) return invalid(parsed.error, path);
+    const parent = parsed.data.parentId === null ? null : comments.find((item) => item.id === parsed.data.parentId);
+    if (parsed.data.parentId !== null && (!parent || parent.recipeId !== recipeId || parent.parentId !== null)) {
+      return error(400, 'VALIDATION_ERROR', 'Data tidak valid', path, [{ field: 'parentId', message: 'Komentar yang dibalas tidak ditemukan' }]);
+    }
+    const created: CommentRecord = { id: nextCommentId++, recipeId, parentId: parsed.data.parentId, author: { id: auth.user.id, name: auth.user.name }, content: parsed.data.content, createdAt: new Date().toISOString() };
+    comments.push(created);
+    return HttpResponse.json({ ...created, replies: [] }, { status: 201 });
+  }),
+  http.delete(apiPath('/comments/:id'), ({ params, request }) => {
+    const path = requestPath(request);
+    const auth = requireUser(request, path);
+    if ('response' in auth) return auth.response;
+    const comment = comments.find((item) => item.id === Number(params.id));
+    if (!comment) return error(404, 'NOT_FOUND', 'Komentar tidak ditemukan', path);
+    if (comment.author.id !== auth.user.id && auth.user.role !== 'ADMIN') return error(403, 'FORBIDDEN', 'Akses ditolak', path);
+    for (let i = comments.length - 1; i >= 0; i--) if (comments[i].id === comment.id || comments[i].parentId === comment.id) comments.splice(i, 1);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // ---- v2.4.0: ulasan ----
+  http.get(apiPath('/reviews/featured'), ({ request }) => {
+    const size = Number(new URL(request.url).searchParams.get('size') ?? 5);
+    if (!Number.isInteger(size) || size < 1 || size > 10) return error(400, 'VALIDATION_ERROR', 'Data tidak valid', requestPath(request), [{ field: 'size', message: 'Ukuran harus 1 sampai 10' }]);
+    const featured = reviews.filter((review) => review.rating >= 4 && review.content)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, size)
+      .map((review) => ({ ...publicReview(review), recipe: { id: review.recipeId, title: recipes.find((recipe) => recipe.id === review.recipeId)?.title ?? '' } }));
+    return HttpResponse.json(featured);
+  }),
+  http.get(apiPath('/recipes/:id/reviews/me'), ({ params, request }) => {
+    const path = requestPath(request);
+    const auth = requireUser(request, path);
+    if ('response' in auth) return auth.response;
+    const review = reviews.find((item) => item.recipeId === Number(params.id) && item.author.id === auth.user.id);
+    return review ? HttpResponse.json(publicReview(review)) : error(404, 'NOT_FOUND', 'Ulasan tidak ditemukan', path);
+  }),
+  http.put(apiPath('/recipes/:id/reviews/me'), async ({ params, request }) => {
+    const path = requestPath(request);
+    const auth = requireUser(request, path);
+    if ('response' in auth) return auth.response;
+    const recipeId = Number(params.id);
+    if (!recipeExists(recipeId)) return error(404, 'NOT_FOUND', 'Resep tidak ditemukan', path);
+    const body = await request.json() as { rating?: unknown; content?: unknown };
+    const parsed = reviewSchema.safeParse({ rating: body.rating, content: body.content ?? null });
+    if (!parsed.success) return invalid(parsed.error, path);
+    const now = new Date().toISOString();
+    const existing = reviews.find((item) => item.recipeId === recipeId && item.author.id === auth.user.id);
+    if (existing) Object.assign(existing, { rating: parsed.data.rating, content: parsed.data.content, updatedAt: now });
+    const review = existing ?? { id: nextReviewId++, recipeId, rating: parsed.data.rating, content: parsed.data.content, author: { id: auth.user.id, name: auth.user.name }, createdAt: now, updatedAt: now };
+    if (!existing) reviews.push(review);
+    return HttpResponse.json(publicReview(review));
+  }),
+  http.delete(apiPath('/recipes/:id/reviews/me'), ({ params, request }) => {
+    const path = requestPath(request);
+    const auth = requireUser(request, path);
+    if ('response' in auth) return auth.response;
+    if (!recipeExists(Number(params.id))) return error(404, 'NOT_FOUND', 'Resep tidak ditemukan', path);
+    const index = reviews.findIndex((item) => item.recipeId === Number(params.id) && item.author.id === auth.user.id);
+    if (index >= 0) reviews.splice(index, 1);
+    return new HttpResponse(null, { status: 204 });
+  }),
+  http.get(apiPath('/recipes/:id/reviews'), ({ params, request }) => {
+    const path = requestPath(request);
+    const recipeId = Number(params.id);
+    if (!recipeExists(recipeId)) return error(404, 'NOT_FOUND', 'Resep tidak ditemukan', path);
+    const paging = parsePageParams(request, path);
+    if ('response' in paging) return paging.response;
+    const items = reviews.filter((item) => item.recipeId === recipeId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(publicReview);
+    return HttpResponse.json(pageSlice(items, paging.page, paging.size));
+  }),
+  http.delete(apiPath('/reviews/:id'), ({ params, request }) => {
+    const path = requestPath(request);
+    const auth = requireAdmin(request, path);
+    if ('response' in auth) return auth.response;
+    const index = reviews.findIndex((item) => item.id === Number(params.id));
+    if (index < 0) return error(404, 'NOT_FOUND', 'Ulasan tidak ditemukan', path);
+    reviews.splice(index, 1);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // ---- v2.4.0: artikel ----
+  http.get(apiPath('/articles/facets'), () => {
+    const counts = new Map<string, number>();
+    articles.forEach((article) => article.tags.forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1)));
+    return HttpResponse.json({
+      categories: (['TIPS', 'CERITA', 'BAHAN', 'TEKNIK'] as const).map((category) => ({ category, count: articles.filter((article) => article.category === category).length })),
+      tags: [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 20).map(([name, count]) => ({ name, count })),
+    });
+  }),
+  http.get(apiPath('/articles'), ({ request }) => {
+    const path = requestPath(request);
+    const paging = parsePageParams(request, path);
+    if ('response' in paging) return paging.response;
+    const url = new URL(request.url);
+    const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+    const category = url.searchParams.get('category');
+    const tag = url.searchParams.get('tag')?.toLowerCase();
+    if (category && !['TIPS', 'CERITA', 'BAHAN', 'TEKNIK'].includes(category)) return error(400, 'VALIDATION_ERROR', 'Data tidak valid', path, [{ field: 'category', message: 'Kategori tidak dikenal' }]);
+    const items = articlesByDate().filter((article) => (!q || article.title.toLowerCase().includes(q)) && (!category || article.category === category) && (!tag || article.tags.includes(tag)));
+    return HttpResponse.json(pageSlice(items.map(articleSummary), paging.page, paging.size));
+  }),
+  http.get(apiPath('/articles/:id'), ({ params, request }) => {
+    const article = articles.find((item) => item.id === Number(params.id));
+    return article ? HttpResponse.json(articleDetail(article)) : error(404, 'NOT_FOUND', 'Artikel tidak ditemukan', requestPath(request));
+  }),
+  http.post(apiPath('/articles'), async ({ request }) => {
+    const path = requestPath(request);
+    const auth = requireAdmin(request, path);
+    if ('response' in auth) return auth.response;
+    const parsed = articleSchema.safeParse(await request.json());
+    if (!parsed.success) return invalid(parsed.error, path);
+    const data = normalizeArticleDraft(parsed.data);
+    const now = new Date().toISOString();
+    const created: ArticleRecord = { id: nextArticleId++, ...data, author: { id: auth.user.id, name: auth.user.name }, publishedAt: now, updatedAt: now };
+    articles.push(created);
+    return HttpResponse.json(articleDetail(created), { status: 201, headers: { Location: apiPath(`/articles/${created.id}`) } });
+  }),
+  http.put(apiPath('/articles/:id'), async ({ params, request }) => {
+    const path = requestPath(request);
+    const auth = requireAdmin(request, path);
+    if ('response' in auth) return auth.response;
+    const article = articles.find((item) => item.id === Number(params.id));
+    if (!article) return error(404, 'NOT_FOUND', 'Artikel tidak ditemukan', path);
+    const parsed = articleSchema.safeParse(await request.json());
+    if (!parsed.success) return invalid(parsed.error, path);
+    Object.assign(article, normalizeArticleDraft(parsed.data), { updatedAt: new Date().toISOString() });
+    return HttpResponse.json(articleDetail(article));
+  }),
+  http.delete(apiPath('/articles/:id'), ({ params, request }) => {
+    const path = requestPath(request);
+    const auth = requireAdmin(request, path);
+    if ('response' in auth) return auth.response;
+    const index = articles.findIndex((item) => item.id === Number(params.id));
+    if (index < 0) return error(404, 'NOT_FOUND', 'Artikel tidak ditemukan', path);
+    articles.splice(index, 1);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // ---- v2.4.0: foto ----
+  http.post(apiPath('/images'), async ({ request }) => {
+    const path = requestPath(request);
+    const auth = requireAdmin(request, path);
+    if ('response' in auth) return auth.response;
+    const file = (await request.formData()).get('file');
+    const types: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+    const fileError = !(file instanceof Blob) ? 'File wajib diunggah' : !types[file.type] ? 'Foto harus berformat JPEG, PNG, atau WebP' : file.size > 5 * 1024 * 1024 ? 'Ukuran foto maksimal 5 MB' : null;
+    if (fileError || !(file instanceof Blob)) return error(400, 'VALIDATION_ERROR', 'Data tidak valid', path, [{ field: 'file', message: fileError ?? 'File wajib diunggah' }]);
+    const name = `${Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')}.${types[file.type]}`;
+    images.set(name, file);
+    return HttpResponse.json({ url: apiPath(`/images/${name}`) }, { status: 201 });
+  }),
+  http.get(apiPath('/images/:name'), ({ params, request }) => {
+    const image = images.get(String(params.name));
+    if (!image) return error(404, 'NOT_FOUND', 'Foto tidak ditemukan', requestPath(request));
+    return new HttpResponse(image, { headers: { 'Content-Type': image.type, 'Cache-Control': 'public, max-age=31536000, immutable' } });
   }),
 ];

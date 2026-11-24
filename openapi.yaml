@@ -1,10 +1,19 @@
 openapi: 3.0.3
 info:
   title: DapurKita API
-  version: 2.3.1
+  version: 2.4.0
   description: |
-    Kontrak REST API DapurKita (MVP), identik dengan DapurKita_API_Handoff_v2.3.pdf, dengan perubahan v2.3.1 di bawah.
+    Kontrak REST API DapurKita, berawal dari DapurKita_API_Handoff_v2.3.pdf, dengan perubahan v2.3.1 dan v2.4.0 di bawah.
     Status: disetujui PM. Sejak v2.3, file ini menjadi acuan integrasi.
+
+    Changelog v2.4.0 (fitur disetujui PM, 24 November 2026; semua perubahan bersifat menambah):
+    - Artikel: `GET/POST /articles`, `GET/PUT/DELETE /articles/{id}`, `GET /articles/facets`.
+    - Komentar resep dengan satu tingkat balasan: `GET/POST /recipes/{id}/comments`, `DELETE /comments/{id}`.
+    - Ulasan dan rating 1-5, satu per user per resep: `GET /recipes/{id}/reviews`,
+      `GET/PUT/DELETE /recipes/{id}/reviews/me`, `DELETE /reviews/{id}` (ADMIN), `GET /reviews/featured`.
+    - Upload foto (ADMIN): `POST /images`, dan foto dilayani lewat `GET /images/{name}`.
+    - `RecipeSummary` dan `RecipeDetail` mendapat field `ratingAverage` dan `ratingCount`.
+    - `imageUrl` resep dan `coverImageUrl` artikel menerima URL http/https atau path hasil upload `/api/v1/images/...`.
 
     Konvensi: base path `/api/v1`, JSON camelCase, tanggal ISO-8601 UTC, field nullable
     selalu dikirim eksplisit sebagai `null`, pagination `page` mulai dari 1.
@@ -22,6 +31,10 @@ tags:
   - name: Category
   - name: Recipe
   - name: Favorite
+  - name: Article
+  - name: Comment
+  - name: Review
+  - name: Image
 
 paths:
   /auth/register:
@@ -371,6 +384,363 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /recipes/{id}/comments:
+    parameters:
+      - $ref: '#/components/parameters/RecipeId'
+    get:
+      tags: [Comment]
+      operationId: listRecipeComments
+      summary: Komentar resep (publik)
+      description: |
+        Halaman berisi komentar utama, terbaru lebih dulu. Setiap komentar utama membawa semua balasannya
+        di `replies`, terlama lebih dulu. `totalElements` menghitung komentar utama saja, sedangkan
+        `totalComments` menghitung komentar utama beserta balasan.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Halaman komentar
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommentPage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Comment]
+      operationId: createRecipeComment
+      summary: Tulis komentar atau balasan (USER/ADMIN)
+      description: |
+        `parentId` diisi untuk membalas. Induknya harus komentar utama pada resep yang sama;
+        jika tidak, `400 VALIDATION_ERROR` dengan field `parentId`. Balasan tidak bisa dibalas lagi.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommentRequest' }
+            example: { content: Sudah saya coba, enak sekali!, parentId: null }
+      responses:
+        '201':
+          description: Komentar dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Comment' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /comments/{id}:
+    parameters:
+      - $ref: '#/components/parameters/CommentId'
+    delete:
+      tags: [Comment]
+      operationId: deleteComment
+      summary: Hapus komentar (pemilik atau ADMIN)
+      description: Menghapus komentar utama ikut menghapus semua balasannya.
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Terhapus
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /recipes/{id}/reviews:
+    parameters:
+      - $ref: '#/components/parameters/RecipeId'
+    get:
+      tags: [Review]
+      operationId: listRecipeReviews
+      summary: Ulasan resep (publik), terbaru lebih dulu
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Halaman ulasan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewPage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /recipes/{id}/reviews/me:
+    parameters:
+      - $ref: '#/components/parameters/RecipeId'
+    get:
+      tags: [Review]
+      operationId: getMyReview
+      summary: Ulasan milik user untuk resep ini
+      description: '`404 NOT_FOUND` jika user belum mengulas resep ini, atau resep tidak ada.'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ulasan user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    put:
+      tags: [Review]
+      operationId: upsertMyReview
+      summary: Beri atau ubah ulasan (satu per user per resep)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewRequest' }
+            example: { rating: 5, content: Bumbunya meresap sempurna. }
+      responses:
+        '200':
+          description: Ulasan tersimpan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [Review]
+      operationId: deleteMyReview
+      summary: Hapus ulasan sendiri (idempoten)
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Terhapus, juga jika belum pernah mengulas
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /reviews/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ReviewId'
+    delete:
+      tags: [Review]
+      operationId: deleteReview
+      summary: Hapus ulasan siapa pun (ADMIN, moderasi)
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Terhapus
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /reviews/featured:
+    get:
+      tags: [Review]
+      operationId: listFeaturedReviews
+      summary: Ulasan unggulan untuk beranda (publik)
+      description: Ulasan dengan rating minimal 4 dan berisi teks, terbaru lebih dulu. Array biasa tanpa pagination.
+      security: []
+      parameters:
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 10, default: 5 }
+      responses:
+        '200':
+          description: Daftar ulasan unggulan
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/FeaturedReview' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /articles:
+    get:
+      tags: [Article]
+      operationId: listArticles
+      summary: Daftar artikel (publik), terbaru lebih dulu
+      security: []
+      parameters:
+        - name: q
+          in: query
+          description: Kata kunci judul, tanpa membedakan huruf besar/kecil
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { $ref: '#/components/schemas/ArticleCategory' }
+        - name: tag
+          in: query
+          description: Satu tag, cocok persis tanpa membedakan huruf besar/kecil
+          schema: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Halaman artikel. Hasil kosong tetap 200 dengan `content` kosong.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArticlePage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Article]
+      operationId: createArticle
+      summary: Tulis artikel (ADMIN)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArticleRequest' }
+      responses:
+        '201':
+          description: Artikel dibuat
+          headers:
+            Location:
+              description: URL artikel, contoh `/api/v1/articles/3`
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArticleDetail' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /articles/facets:
+    get:
+      tags: [Article]
+      operationId: getArticleFacets
+      summary: Jumlah artikel per kategori dan tag terpopuler (publik)
+      description: Kategori tanpa artikel tetap dikirim dengan `count` 0. Maksimal 20 tag, terbanyak lebih dulu.
+      security: []
+      responses:
+        '200':
+          description: Faset artikel
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArticleFacets' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /articles/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ArticleId'
+    get:
+      tags: [Article]
+      operationId: getArticle
+      summary: Detail artikel (publik)
+      security: []
+      responses:
+        '200':
+          description: Detail artikel
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArticleDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    put:
+      tags: [Article]
+      operationId: updateArticle
+      summary: Ubah artikel, replace penuh (ADMIN)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArticleRequest' }
+      responses:
+        '200':
+          description: Artikel terbaru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArticleDetail' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [Article]
+      operationId: deleteArticle
+      summary: Hapus artikel (ADMIN)
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Terhapus
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /images:
+    post:
+      tags: [Image]
+      operationId: uploadImage
+      summary: Unggah foto (ADMIN)
+      description: |
+        JPEG, PNG, atau WebP, maksimal 5 MB. Jenis file diperiksa dari isinya, bukan dari nama.
+        File yang ditolak menghasilkan `400 VALIDATION_ERROR` dengan field `file`.
+        URL hasil dipakai sebagai `imageUrl` resep atau `coverImageUrl` artikel.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: Foto tersimpan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImageUpload' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /images/{name}:
+    get:
+      tags: [Image]
+      operationId: getImage
+      summary: Ambil foto hasil upload (publik)
+      description: Nama file acak dan tidak pernah berubah isinya, jadi boleh di-cache lama (`immutable`).
+      security: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[a-f0-9]{32}\.(jpg|png|webp)$' }
+      responses:
+        '200':
+          description: Isi foto
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -409,6 +779,21 @@ components:
         enum: [newest, oldest, title]
         default: newest
     RecipeId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    ArticleId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    CommentId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    ReviewId:
       name: id
       in: path
       required: true
@@ -574,7 +959,7 @@ components:
     RecipeSummary:
       type: object
       required:
-        [id, title, description, imageUrl, cookingTimeMinutes, servings, category, isFavorited, createdAt]
+        [id, title, description, imageUrl, cookingTimeMinutes, servings, category, isFavorited, ratingAverage, ratingCount, createdAt]
       properties:
         id: { type: integer, format: int64, example: 12 }
         title: { type: string, example: Rendang Sapi }
@@ -584,6 +969,12 @@ components:
         servings: { type: integer, minimum: 1, example: 6 }
         category: { $ref: '#/components/schemas/CategoryRef' }
         isFavorited: { type: boolean }
+        ratingAverage:
+          type: number
+          nullable: true
+          description: Rata-rata rating 1-5, dibulatkan satu desimal. `null` jika belum ada ulasan.
+          example: 4.5
+        ratingCount: { type: integer, minimum: 0, example: 12 }
         createdAt: { type: string, format: date-time }
 
     RecipeDetail:
@@ -627,13 +1018,7 @@ components:
       properties:
         title: { type: string, minLength: 3, maxLength: 150 }
         description: { type: string, nullable: true, maxLength: 2000 }
-        imageUrl:
-          type: string
-          nullable: true
-          format: uri
-          maxLength: 2048
-          description: URL valid dengan skema http atau https
-          pattern: '^https?://'
+        imageUrl: { $ref: '#/components/schemas/ImageUrl' }
         cookingTimeMinutes: { type: integer, minimum: 1 }
         servings: { type: integer, minimum: 1 }
         categoryId:
@@ -678,3 +1063,202 @@ components:
         totalElements: { type: integer, format: int64, example: 87 }
         totalPages: { type: integer, example: 8 }
         hasNext: { type: boolean, example: true }
+
+    ImageUrl:
+      type: string
+      nullable: true
+      maxLength: 2048
+      description: URL http/https, atau path hasil `POST /images` yang diawali `/api/v1/images/`.
+      pattern: '^(https?://|/api/v1/images/)'
+      example: /api/v1/images/3f2a9c0d1b7e4a6f8c5d2e1f0a9b8c7d.jpg
+
+    ImageUpload:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string, example: /api/v1/images/3f2a9c0d1b7e4a6f8c5d2e1f0a9b8c7d.jpg }
+
+    AuthorRef:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: integer, format: int64, example: 7 }
+        name: { type: string, example: Siti }
+
+    Comment:
+      type: object
+      required: [id, recipeId, parentId, author, content, createdAt, replies]
+      properties:
+        id: { type: integer, format: int64, example: 31 }
+        recipeId: { type: integer, format: int64, example: 12 }
+        parentId: { type: integer, format: int64, nullable: true, description: '`null` untuk komentar utama' }
+        author: { $ref: '#/components/schemas/AuthorRef' }
+        content: { type: string, example: 'Sudah saya coba, enak sekali!' }
+        createdAt: { type: string, format: date-time }
+        replies:
+          type: array
+          description: Balasan, terlama lebih dulu. Selalu kosong pada balasan.
+          items: { $ref: '#/components/schemas/Comment' }
+
+    CommentRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 1000, description: Di-trim }
+        parentId: { type: integer, format: int64, nullable: true }
+
+    CommentPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages, hasNext, totalComments]
+      properties:
+        content:
+          type: array
+          items: { $ref: '#/components/schemas/Comment' }
+        page: { type: integer, example: 1 }
+        size: { type: integer, example: 12 }
+        totalElements: { type: integer, format: int64, description: Jumlah komentar utama }
+        totalPages: { type: integer }
+        hasNext: { type: boolean }
+        totalComments: { type: integer, format: int64, description: Komentar utama beserta balasan }
+
+    Review:
+      type: object
+      required: [id, rating, content, author, createdAt, updatedAt]
+      properties:
+        id: { type: integer, format: int64, example: 5 }
+        rating: { type: integer, minimum: 1, maximum: 5, example: 5 }
+        content: { type: string, nullable: true, example: Bumbunya meresap sempurna. }
+        author: { $ref: '#/components/schemas/AuthorRef' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    FeaturedReview:
+      allOf:
+        - $ref: '#/components/schemas/Review'
+        - type: object
+          required: [recipe]
+          properties:
+            recipe:
+              type: object
+              required: [id, title]
+              properties:
+                id: { type: integer, format: int64, example: 12 }
+                title: { type: string, example: Rendang Sapi }
+
+    ReviewRequest:
+      type: object
+      required: [rating]
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        content: { type: string, nullable: true, maxLength: 500, description: 'Di-trim; teks kosong disimpan sebagai `null`' }
+
+    ReviewPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages, hasNext]
+      properties:
+        content:
+          type: array
+          items: { $ref: '#/components/schemas/Review' }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
+        hasNext: { type: boolean }
+
+    ArticleCategory:
+      type: string
+      description: TIPS = Tips dapur, CERITA = Cerita kuliner, BAHAN = Mengenal bahan, TEKNIK = Teknik memasak
+      enum: [TIPS, CERITA, BAHAN, TEKNIK]
+
+    ArticleLink:
+      type: object
+      required: [id, title, coverImageUrl]
+      properties:
+        id: { type: integer, format: int64 }
+        title: { type: string }
+        coverImageUrl: { type: string, nullable: true }
+
+    ArticleSummary:
+      type: object
+      required: [id, title, excerpt, coverImageUrl, category, tags, author, readingTimeMinutes, publishedAt]
+      properties:
+        id: { type: integer, format: int64, example: 3 }
+        title: { type: string, example: Rahasia Santan Tidak Pecah }
+        excerpt: { type: string, nullable: true, description: Ringkasan singkat }
+        coverImageUrl: { type: string, nullable: true }
+        category: { $ref: '#/components/schemas/ArticleCategory' }
+        tags:
+          type: array
+          items: { type: string }
+          example: [santan, rendang]
+        author: { $ref: '#/components/schemas/AuthorRef' }
+        readingTimeMinutes: { type: integer, minimum: 1, description: 'Perkiraan dari jumlah kata, 200 kata per menit' }
+        publishedAt: { type: string, format: date-time }
+
+    ArticleDetail:
+      allOf:
+        - $ref: '#/components/schemas/ArticleSummary'
+        - type: object
+          required: [content, updatedAt, previous, next]
+          properties:
+            content:
+              type: string
+              description: Teks biasa. Paragraf dipisahkan baris kosong; tidak ada HTML atau Markdown.
+            updatedAt: { type: string, format: date-time }
+            previous:
+              description: Artikel yang terbit tepat sebelumnya (lebih lama), atau `null`
+              nullable: true
+              allOf: [{ $ref: '#/components/schemas/ArticleLink' }]
+            next:
+              description: Artikel yang terbit tepat sesudahnya (lebih baru), atau `null`
+              nullable: true
+              allOf: [{ $ref: '#/components/schemas/ArticleLink' }]
+
+    ArticleRequest:
+      type: object
+      required: [title, content, category]
+      properties:
+        title: { type: string, minLength: 3, maxLength: 150 }
+        excerpt: { type: string, nullable: true, maxLength: 300 }
+        content: { type: string, minLength: 1, maxLength: 20000 }
+        coverImageUrl: { $ref: '#/components/schemas/ImageUrl' }
+        category: { $ref: '#/components/schemas/ArticleCategory' }
+        tags:
+          type: array
+          maxItems: 8
+          description: Di-trim dan diubah ke huruf kecil; duplikat dibuang.
+          items: { type: string, minLength: 1, maxLength: 30 }
+
+    ArticlePage:
+      type: object
+      required: [content, page, size, totalElements, totalPages, hasNext]
+      properties:
+        content:
+          type: array
+          items: { $ref: '#/components/schemas/ArticleSummary' }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
+        hasNext: { type: boolean }
+
+    ArticleFacets:
+      type: object
+      required: [categories, tags]
+      properties:
+        categories:
+          type: array
+          items:
+            type: object
+            required: [category, count]
+            properties:
+              category: { $ref: '#/components/schemas/ArticleCategory' }
+              count: { type: integer, format: int64 }
+        tags:
+          type: array
+          items:
+            type: object
+            required: [name, count]
+            properties:
+              name: { type: string }
+              count: { type: integer, format: int64 }

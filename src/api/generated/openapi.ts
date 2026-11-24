@@ -204,6 +204,240 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recipes/{id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RecipeId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Komentar resep (publik)
+         * @description Halaman berisi komentar utama, terbaru lebih dulu. Setiap komentar utama membawa semua balasannya
+         *     di `replies`, terlama lebih dulu. `totalElements` menghitung komentar utama saja, sedangkan
+         *     `totalComments` menghitung komentar utama beserta balasan.
+         */
+        get: operations["listRecipeComments"];
+        put?: never;
+        /**
+         * Tulis komentar atau balasan (USER/ADMIN)
+         * @description `parentId` diisi untuk membalas. Induknya harus komentar utama pada resep yang sama;
+         *     jika tidak, `400 VALIDATION_ERROR` dengan field `parentId`. Balasan tidak bisa dibalas lagi.
+         */
+        post: operations["createRecipeComment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/comments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["CommentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Hapus komentar (pemilik atau ADMIN)
+         * @description Menghapus komentar utama ikut menghapus semua balasannya.
+         */
+        delete: operations["deleteComment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recipes/{id}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RecipeId"];
+            };
+            cookie?: never;
+        };
+        /** Ulasan resep (publik), terbaru lebih dulu */
+        get: operations["listRecipeReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recipes/{id}/reviews/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RecipeId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Ulasan milik user untuk resep ini
+         * @description `404 NOT_FOUND` jika user belum mengulas resep ini, atau resep tidak ada.
+         */
+        get: operations["getMyReview"];
+        /** Beri atau ubah ulasan (satu per user per resep) */
+        put: operations["upsertMyReview"];
+        post?: never;
+        /** Hapus ulasan sendiri (idempoten) */
+        delete: operations["deleteMyReview"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviews/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Hapus ulasan siapa pun (ADMIN, moderasi) */
+        delete: operations["deleteReview"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviews/featured": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ulasan unggulan untuk beranda (publik)
+         * @description Ulasan dengan rating minimal 4 dan berisi teks, terbaru lebih dulu. Array biasa tanpa pagination.
+         */
+        get: operations["listFeaturedReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/articles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Daftar artikel (publik), terbaru lebih dulu */
+        get: operations["listArticles"];
+        put?: never;
+        /** Tulis artikel (ADMIN) */
+        post: operations["createArticle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/articles/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Jumlah artikel per kategori dan tag terpopuler (publik)
+         * @description Kategori tanpa artikel tetap dikirim dengan `count` 0. Maksimal 20 tag, terbanyak lebih dulu.
+         */
+        get: operations["getArticleFacets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/articles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ArticleId"];
+            };
+            cookie?: never;
+        };
+        /** Detail artikel (publik) */
+        get: operations["getArticle"];
+        /** Ubah artikel, replace penuh (ADMIN) */
+        put: operations["updateArticle"];
+        post?: never;
+        /** Hapus artikel (ADMIN) */
+        delete: operations["deleteArticle"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unggah foto (ADMIN)
+         * @description JPEG, PNG, atau WebP, maksimal 5 MB. Jenis file diperiksa dari isinya, bukan dari nama.
+         *     File yang ditolak menghasilkan `400 VALIDATION_ERROR` dengan field `file`.
+         *     URL hasil dipakai sebagai `imageUrl` resep atau `coverImageUrl` artikel.
+         */
+        post: operations["uploadImage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/images/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ambil foto hasil upload (publik)
+         * @description Nama file acak dan tidak pernah berubah isinya, jadi boleh di-cache lama (`immutable`).
+         */
+        get: operations["getImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -311,6 +545,13 @@ export interface components {
             servings: number;
             category: components["schemas"]["CategoryRef"];
             isFavorited: boolean;
+            /**
+             * @description Rata-rata rating 1-5, dibulatkan satu desimal. `null` jika belum ada ulasan.
+             * @example 4.5
+             */
+            ratingAverage: number | null;
+            /** @example 12 */
+            ratingCount: number;
             /** Format: date-time */
             createdAt: string;
         };
@@ -344,11 +585,7 @@ export interface components {
         RecipeRequest: {
             title: string;
             description?: string | null;
-            /**
-             * Format: uri
-             * @description URL valid dengan skema http atau https
-             */
-            imageUrl?: string | null;
+            imageUrl?: components["schemas"]["ImageUrl"];
             cookingTimeMinutes: number;
             servings: number;
             /**
@@ -382,6 +619,190 @@ export interface components {
             totalPages: number;
             /** @example true */
             hasNext: boolean;
+        };
+        /**
+         * @description URL http/https, atau path hasil `POST /images` yang diawali `/api/v1/images/`.
+         * @example /api/v1/images/3f2a9c0d1b7e4a6f8c5d2e1f0a9b8c7d.jpg
+         */
+        ImageUrl: string | null;
+        ImageUpload: {
+            /** @example /api/v1/images/3f2a9c0d1b7e4a6f8c5d2e1f0a9b8c7d.jpg */
+            url: string;
+        };
+        AuthorRef: {
+            /**
+             * Format: int64
+             * @example 7
+             */
+            id: number;
+            /** @example Siti */
+            name: string;
+        };
+        Comment: {
+            /**
+             * Format: int64
+             * @example 31
+             */
+            id: number;
+            /**
+             * Format: int64
+             * @example 12
+             */
+            recipeId: number;
+            /**
+             * Format: int64
+             * @description `null` untuk komentar utama
+             */
+            parentId: number | null;
+            author: components["schemas"]["AuthorRef"];
+            /** @example Sudah saya coba, enak sekali! */
+            content: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description Balasan, terlama lebih dulu. Selalu kosong pada balasan. */
+            replies: components["schemas"]["Comment"][];
+        };
+        CommentRequest: {
+            /** @description Di-trim */
+            content: string;
+            /** Format: int64 */
+            parentId?: number | null;
+        };
+        CommentPage: {
+            content: components["schemas"]["Comment"][];
+            /** @example 1 */
+            page: number;
+            /** @example 12 */
+            size: number;
+            /**
+             * Format: int64
+             * @description Jumlah komentar utama
+             */
+            totalElements: number;
+            totalPages: number;
+            hasNext: boolean;
+            /**
+             * Format: int64
+             * @description Komentar utama beserta balasan
+             */
+            totalComments: number;
+        };
+        Review: {
+            /**
+             * Format: int64
+             * @example 5
+             */
+            id: number;
+            /** @example 5 */
+            rating: number;
+            /** @example Bumbunya meresap sempurna. */
+            content: string | null;
+            author: components["schemas"]["AuthorRef"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        FeaturedReview: components["schemas"]["Review"] & {
+            recipe: {
+                /**
+                 * Format: int64
+                 * @example 12
+                 */
+                id: number;
+                /** @example Rendang Sapi */
+                title: string;
+            };
+        };
+        ReviewRequest: {
+            rating: number;
+            /** @description Di-trim; teks kosong disimpan sebagai `null` */
+            content?: string | null;
+        };
+        ReviewPage: {
+            content: components["schemas"]["Review"][];
+            page: number;
+            size: number;
+            /** Format: int64 */
+            totalElements: number;
+            totalPages: number;
+            hasNext: boolean;
+        };
+        /**
+         * @description TIPS = Tips dapur, CERITA = Cerita kuliner, BAHAN = Mengenal bahan, TEKNIK = Teknik memasak
+         * @enum {string}
+         */
+        ArticleCategory: "TIPS" | "CERITA" | "BAHAN" | "TEKNIK";
+        ArticleLink: {
+            /** Format: int64 */
+            id: number;
+            title: string;
+            coverImageUrl: string | null;
+        };
+        ArticleSummary: {
+            /**
+             * Format: int64
+             * @example 3
+             */
+            id: number;
+            /** @example Rahasia Santan Tidak Pecah */
+            title: string;
+            /** @description Ringkasan singkat */
+            excerpt: string | null;
+            coverImageUrl: string | null;
+            category: components["schemas"]["ArticleCategory"];
+            /**
+             * @example [
+             *       "santan",
+             *       "rendang"
+             *     ]
+             */
+            tags: string[];
+            author: components["schemas"]["AuthorRef"];
+            /** @description Perkiraan dari jumlah kata, 200 kata per menit */
+            readingTimeMinutes: number;
+            /** Format: date-time */
+            publishedAt: string;
+        };
+        ArticleDetail: components["schemas"]["ArticleSummary"] & {
+            /** @description Teks biasa. Paragraf dipisahkan baris kosong; tidak ada HTML atau Markdown. */
+            content: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** @description Artikel yang terbit tepat sebelumnya (lebih lama), atau `null` */
+            previous: components["schemas"]["ArticleLink"] | null;
+            /** @description Artikel yang terbit tepat sesudahnya (lebih baru), atau `null` */
+            next: components["schemas"]["ArticleLink"] | null;
+        };
+        ArticleRequest: {
+            title: string;
+            excerpt?: string | null;
+            content: string;
+            coverImageUrl?: components["schemas"]["ImageUrl"];
+            category: components["schemas"]["ArticleCategory"];
+            /** @description Di-trim dan diubah ke huruf kecil; duplikat dibuang. */
+            tags?: string[];
+        };
+        ArticlePage: {
+            content: components["schemas"]["ArticleSummary"][];
+            page: number;
+            size: number;
+            /** Format: int64 */
+            totalElements: number;
+            totalPages: number;
+            hasNext: boolean;
+        };
+        ArticleFacets: {
+            categories: {
+                category: components["schemas"]["ArticleCategory"];
+                /** Format: int64 */
+                count: number;
+            }[];
+            tags: {
+                name: string;
+                /** Format: int64 */
+                count: number;
+            }[];
         };
     };
     responses: {
@@ -494,6 +915,9 @@ export interface components {
         Size: number;
         Sort: "newest" | "oldest" | "title";
         RecipeId: number;
+        ArticleId: number;
+        CommentId: number;
+        ReviewId: number;
     };
     requestBodies: never;
     headers: {
@@ -986,6 +1410,479 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    listRecipeComments: {
+        parameters: {
+            query?: {
+                /** @description Nomor halaman, mulai dari 1 */
+                page?: components["parameters"]["Page"];
+                /** @description Jumlah item per halaman */
+                size?: components["parameters"]["Size"];
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["RecipeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Halaman komentar */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentPage"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createRecipeComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RecipeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "content": "Sudah saya coba",
+                 *       "enak sekali!": null,
+                 *       "parentId": null
+                 *     }
+                 */
+                "application/json": components["schemas"]["CommentRequest"];
+            };
+        };
+        responses: {
+            /** @description Komentar dibuat */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["CommentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Terhapus */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listRecipeReviews: {
+        parameters: {
+            query?: {
+                /** @description Nomor halaman, mulai dari 1 */
+                page?: components["parameters"]["Page"];
+                /** @description Jumlah item per halaman */
+                size?: components["parameters"]["Size"];
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["RecipeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Halaman ulasan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewPage"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getMyReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RecipeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ulasan user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Review"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    upsertMyReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RecipeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "rating": 5,
+                 *       "content": "Bumbunya meresap sempurna."
+                 *     }
+                 */
+                "application/json": components["schemas"]["ReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Ulasan tersimpan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Review"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteMyReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RecipeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Terhapus, juga jika belum pernah mengulas */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Terhapus */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listFeaturedReviews: {
+        parameters: {
+            query?: {
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Daftar ulasan unggulan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeaturedReview"][];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listArticles: {
+        parameters: {
+            query?: {
+                /** @description Kata kunci judul, tanpa membedakan huruf besar/kecil */
+                q?: string;
+                category?: components["schemas"]["ArticleCategory"];
+                /** @description Satu tag, cocok persis tanpa membedakan huruf besar/kecil */
+                tag?: string;
+                /** @description Nomor halaman, mulai dari 1 */
+                page?: components["parameters"]["Page"];
+                /** @description Jumlah item per halaman */
+                size?: components["parameters"]["Size"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Halaman artikel. Hasil kosong tetap 200 dengan `content` kosong. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticlePage"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArticleRequest"];
+            };
+        };
+        responses: {
+            /** @description Artikel dibuat */
+            201: {
+                headers: {
+                    /** @description URL artikel, contoh `/api/v1/articles/3` */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleDetail"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getArticleFacets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Faset artikel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleFacets"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ArticleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Detail artikel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ArticleId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArticleRequest"];
+            };
+        };
+        responses: {
+            /** @description Artikel terbaru */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleDetail"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ArticleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Terhapus */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    uploadImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Foto tersimpan */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageUpload"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Isi foto */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
 }

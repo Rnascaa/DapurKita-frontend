@@ -4,7 +4,7 @@ import { useAuth } from './AuthProvider';
 export function RequireUser() {
   const { ready, user } = useAuth();
   const location = useLocation();
-  if (!ready) return <main className="p-8 text-center">Memulihkan sesi…</main>;
+  if (!ready) return <main className="page py-24 text-center text-graphite">Memulihkan sesi…</main>;
   if (!user) return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}${location.hash}` }} />;
   return <Outlet />;
 }

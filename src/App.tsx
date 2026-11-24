@@ -1,48 +1,22 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { createBrowserRouter, Link, Outlet, RouterProvider, useLocation } from 'react-router-dom';
-import { authApi, clearSession, updateSessionUser, userApi } from './api';
+import { useRef, useState, type FormEvent } from 'react';
+import { createBrowserRouter, Link, RouterProvider } from 'react-router-dom';
+import { updateSessionUser, userApi } from './api';
 import { AuthProvider, useAuth } from './features/auth/AuthProvider';
 import { RequireAdmin, RequireUser } from './features/auth/RouteGuards';
 import { LoginPage, RegisterPage } from './pages/AuthPages';
 import { HomePage } from './pages/HomePage';
 import { FavoritesPage, RecipeDetailPage, RecipeListPage } from './pages/RecipePages';
 import { RecipeEditorPage } from './pages/RecipeEditorPage';
+import { ArticleDetailPage, ArticleListPage } from './pages/ArticlePages';
+import { ArticleEditorPage } from './pages/ArticleEditorPage';
+import { MenuPage } from './pages/MenuPage';
+import { AboutPage } from './pages/AboutPage';
 import { profileSchema } from './features/auth/validation';
 import { useDocumentTitle } from './hooks/useDocumentTitle';
 import type { components } from './api/generated/openapi';
-
-function Layout() {
-  const { user } = useAuth();
-  const location = useLocation();
-  const [logoutBusy, setLogoutBusy] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  useEffect(() => { setMenuOpen(false); }, [location.key]);
-  async function logout() {
-    setLogoutBusy(true);
-    await authApi.logout();
-    clearSession();
-    setLogoutBusy(false);
-    setMenuOpen(false);
-  }
-  return <div className="flex min-h-screen flex-col">
-    <header className="border-b border-stone-200 bg-white">
-      <nav className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-5 gap-y-3 px-5 py-4">
-        <Link to="/" className="text-xl font-bold text-orange-800">DapurKita</Link>
-        <button type="button" className="rounded-lg border px-3 py-1 md:hidden" aria-expanded={menuOpen} aria-controls="menu-utama" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? 'Tutup' : 'Menu'}</button>
-        <div id="menu-utama" className={`${menuOpen ? 'flex' : 'hidden'} w-full min-w-0 flex-col items-start gap-3 md:flex md:w-auto md:flex-row md:items-center md:gap-5`}>
-          <Link to="/recipes">Resep</Link>
-          {user && <Link to="/favorites">Favorit</Link>}
-          {user?.role === 'ADMIN' && <Link to="/admin/recipes/new">Tambah resep</Link>}
-          {user ? <><Link to="/profile" className="max-w-full truncate md:max-w-48">{user.name}</Link><button disabled={logoutBusy} onClick={logout}>Keluar</button></> : <><Link to="/login">Masuk</Link><Link to="/register">Daftar</Link></>}
-        </div>
-      </nav>
-    </header>
-    <div className="flex-1"><Outlet /></div>
-    <footer className="border-t border-stone-200 bg-white">
-      <p className="mx-auto max-w-6xl px-5 py-6 text-sm text-stone-600">© {new Date().getFullYear()} DapurKita · Temukan resep, ciptakan rasa.</p>
-    </footer>
-  </div>;
-}
+import { Layout } from './components/Layout';
+import { PageHeader } from './components/Decor';
+import { HEADER_OFFSET, photo } from './lib/photos';
 
 function ProfilePage() {
   useDocumentTitle('Profil');
@@ -73,16 +47,35 @@ function ProfilePage() {
       submitting.current = false; setBusy(false);
     }
   }
-  return <main className="mx-auto max-w-3xl px-5 py-10"><h1 className="text-3xl font-bold">Profil</h1>
-    <form onSubmit={submit} noValidate className="mt-6 max-w-md space-y-4">
-      <label className="block">Nama<input className="mt-1 w-full rounded-lg border-stone-300" value={name} minLength={2} maxLength={100} onChange={(event) => setName(event.target.value)} />{nameError && <span role="alert" className="text-sm text-red-700">{nameError}</span>}</label>
-      <label className="block">Email<input readOnly className="mt-1 w-full rounded-lg border-stone-300 bg-stone-100" value={user?.email ?? ''} /></label>
-      {formError && <p role="alert" className="text-red-700">{formError}</p>}{saved && <p role="status" className="text-green-700">Profil tersimpan.</p>}
-      <button disabled={busy} className="rounded-lg bg-orange-700 px-5 py-3 font-semibold text-white disabled:opacity-60">{busy ? 'Menyimpan…' : 'Simpan nama'}</button>
-    </form>
+  return <main>
+    <PageHeader eyebrow="Akun" title="Profil" image={photo('daun-oranye')}>Atur nama yang tampil di DapurKita.</PageHeader>
+    <div className="page py-14">
+      <form onSubmit={submit} noValidate className="mx-auto max-w-lg space-y-5 bg-sage p-6 sm:p-10">
+        <label className="field-label">Nama<input className="field" value={name} minLength={2} maxLength={100} onChange={(event) => setName(event.target.value)} />{nameError && <span role="alert" className="field-error">{nameError}</span>}</label>
+        <label className="field-label">Email<input readOnly className="field bg-white/60 text-graphite" value={user?.email ?? ''} /></label>
+        {formError && <p role="alert" className="text-sm text-red-700">{formError}</p>}{saved && <p role="status" className="text-sm font-bold text-olive">Profil tersimpan.</p>}
+        <button disabled={busy} className="btn-dark w-full">{busy ? 'Menyimpan…' : 'Simpan nama'}</button>
+      </form>
+    </div>
   </main>;
 }
-function NotFound() { useDocumentTitle('Halaman tidak ditemukan'); return <main className="mx-auto max-w-4xl px-5 py-12"><h1 className="text-2xl font-bold">Halaman tidak ditemukan</h1><Link className="mt-4 inline-block text-orange-800" to="/">Kembali ke beranda</Link></main>; }
+
+/** Halaman 404 (desain "Coming Soon"). */
+function NotFound() {
+  useDocumentTitle('Halaman tidak ditemukan');
+  return <main className={`relative flex min-h-screen items-center overflow-hidden bg-forest text-white ${HEADER_OFFSET}`}>
+    <img src={photo('botol')} alt="" className="absolute inset-0 h-full w-full object-cover" />
+    <div className="absolute inset-0 bg-forest/70" aria-hidden="true" />
+    <div className="page relative py-24 text-center">
+      <p className="font-serif text-4xl uppercase tracking-[0.25em] sm:text-6xl">Tidak ditemukan</p>
+      <div className="mx-auto mt-6 max-w-xl border-t-2 border-dotted border-white/50 pt-6">
+        <p className="font-sans text-7xl font-bold sm:text-8xl">404</p>
+        <h1 className="mt-2 text-sm font-normal text-white/80">Halaman yang kamu cari tidak ada atau sudah dipindahkan.</h1>
+      </div>
+      <div className="mt-10 flex flex-wrap justify-center gap-4"><Link className="btn-light" to="/">Kembali ke beranda</Link><Link className="btn-light" to="/menu">Lihat menu</Link></div>
+    </div>
+  </main>;
+}
 
 const router = createBrowserRouter([
   {
@@ -91,8 +84,12 @@ const router = createBrowserRouter([
       element: <Layout />,
       children: [
         { path: '/', element: <HomePage /> },
+        { path: '/menu', element: <MenuPage /> },
         { path: '/recipes', element: <RecipeListPage /> },
         { path: '/recipes/:id', element: <RecipeDetailPage /> },
+        { path: '/artikel', element: <ArticleListPage /> },
+        { path: '/artikel/:id', element: <ArticleDetailPage /> },
+        { path: '/tentang', element: <AboutPage /> },
         { path: '/login', element: <LoginPage /> },
         { path: '/register', element: <RegisterPage /> },
         { element: <RequireUser />, children: [
@@ -101,6 +98,8 @@ const router = createBrowserRouter([
           { element: <RequireAdmin />, children: [
             { path: '/admin/recipes/new', element: <RecipeEditorPage /> },
             { path: '/admin/recipes/:id/edit', element: <RecipeEditorPage /> },
+            { path: '/admin/artikel/baru', element: <ArticleEditorPage /> },
+            { path: '/admin/artikel/:id/ubah', element: <ArticleEditorPage /> },
           ] },
         ] },
         { path: '*', element: <NotFound /> },
