@@ -4,6 +4,7 @@ import { authApi, clearSession } from '../api';
 import { useAuth } from '../features/auth/AuthProvider';
 import { ARTICLE_CATEGORIES } from '../features/articles/validation';
 import { photo } from '../lib/photos';
+import { BackdropPhoto } from './Decor';
 
 /** Menu layar penuh (desain "Navigation - Fullscreen Cover"). */
 function FullscreenMenu({ onClose }: { onClose: () => void }) {
@@ -34,7 +35,7 @@ function FullscreenMenu({ onClose }: { onClose: () => void }) {
     { to: '/tentang', label: 'Tentang' },
   ];
   return <div role="dialog" aria-modal="true" aria-label="Menu utama" className="fixed inset-0 z-50 overflow-y-auto bg-forest text-white">
-    <img src={photo('daun-lembut')} alt="" className="pointer-events-none fixed inset-0 h-full w-full object-cover opacity-25" />
+    <BackdropPhoto src={photo('daun-lembut')} className="pointer-events-none fixed inset-0 h-full w-full opacity-25" />
     <div className="page relative flex min-h-full flex-col py-6">
       <div className="flex items-center justify-between">
         <Link to="/" onClick={onClose} className="border border-white/70 px-3 py-1 font-serif text-2xl leading-tight">DapurKita</Link>

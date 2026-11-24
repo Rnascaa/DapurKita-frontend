@@ -15,7 +15,7 @@ import { profileSchema } from './features/auth/validation';
 import { useDocumentTitle } from './hooks/useDocumentTitle';
 import type { components } from './api/generated/openapi';
 import { Layout } from './components/Layout';
-import { PageHeader } from './components/Decor';
+import { BackdropPhoto, PageHeader } from './components/Decor';
 import { HEADER_OFFSET, photo } from './lib/photos';
 
 function ProfilePage() {
@@ -64,7 +64,7 @@ function ProfilePage() {
 function NotFound() {
   useDocumentTitle('Halaman tidak ditemukan');
   return <main className={`relative flex min-h-screen items-center overflow-hidden bg-forest text-white ${HEADER_OFFSET}`}>
-    <img src={photo('botol')} alt="" className="absolute inset-0 h-full w-full object-cover" />
+    <BackdropPhoto src={photo('botol')} className="absolute inset-0 h-full w-full" />
     <div className="absolute inset-0 bg-forest/70" aria-hidden="true" />
     <div className="page relative py-24 text-center">
       <p className="font-serif text-4xl uppercase tracking-[0.25em] sm:text-6xl">Tidak ditemukan</p>

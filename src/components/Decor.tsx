@@ -20,10 +20,17 @@ export function Photo({ src, className = '', large = false, dark = false, alt = 
   return <img src={src} alt={alt} loading="lazy" className={`object-cover ${className}`} onError={() => setFailed(true)} />;
 }
 
+/** Foto latar dekoratif. Disembunyikan bila gagal dimuat, misalnya saat foto dekorasi tidak tersedia. */
+export function BackdropPhoto({ src, className = '' }: { src: string; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return <img src={src} alt="" className={`object-cover ${className}`} onError={() => setFailed(true)} />;
+}
+
 /** Header halaman (desain Header_*): foto penuh di belakang menu, judul di tengah. */
 export function PageHeader({ eyebrow, title, children, image = photo('kubis') }: { eyebrow?: string; title: string; children?: ReactNode; image?: string | null }) {
   return <section className={`relative flex min-h-[22rem] items-center overflow-hidden bg-forest text-white sm:min-h-[30rem] ${HEADER_OFFSET}`}>
-    {image && <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" />}
+    {image && <BackdropPhoto key={image} src={image} className="absolute inset-0 h-full w-full" />}
     <div className="absolute inset-0 bg-forest/60" aria-hidden="true" />
     <div className="page relative w-full py-14 text-center sm:py-20">
       {eyebrow && <p className="text-xs font-bold uppercase tracking-[0.2em] text-lime">{eyebrow}</p>}

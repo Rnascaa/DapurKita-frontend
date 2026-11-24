@@ -3,3 +3,6 @@ dist/
 .env.local
 .env.*.local
 *.tsbuildinfo
+
+# Foto dekorasi FoodZero tidak ikut repo (lisensi template); disimpan di repo ops private.
+public/images/foodzero/

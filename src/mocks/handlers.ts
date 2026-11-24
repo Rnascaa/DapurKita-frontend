@@ -25,7 +25,8 @@ let tokenExpiredInjected = false;
 let tokenExpiredRefreshUser: User | null = null;
 
 const admin: User = { id: 1, name: 'Admin DapurKita', email: 'admin@dapurkita.local', role: 'ADMIN' };
-const adminPassword = 'Admin12345!';
+// Kata sandi admin mock diambil dari .env.development.local; jika kosong, login admin mock dimatikan.
+const adminPassword = import.meta.env.VITE_MOCK_ADMIN_PASSWORD ?? '';
 const tokenUsers = new Map<string, User>();
 
 function apiPath(path: string) { return `${API_BASE_URL}${path}`; }
@@ -232,7 +233,7 @@ export const handlers = [
     const parsed = loginSchema.safeParse(await request.json());
     if (!parsed.success) return invalid(parsed.error, requestPath(request));
     const body = parsed.data;
-    if (body.email.toLowerCase() === admin.email.toLowerCase() && body.password === adminPassword) return authResponse(admin);
+    if (body.email.toLowerCase() === admin.email.toLowerCase() && adminPassword !== '' && body.password === adminPassword) return authResponse(admin);
     const account = users.get(body.email.toLowerCase());
     if (!account || account.password !== body.password) return error(401, 'INVALID_CREDENTIALS', 'Email atau password salah', apiPath('/auth/login'));
     return authResponse(account.user);

@@ -6,6 +6,7 @@ import { loginSchema, registerSchema } from '../features/auth/validation';
 import { safeInternalPath } from '../features/auth/redirect';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { HEADER_OFFSET, photo } from '../lib/photos';
+import { BackdropPhoto } from '../components/Decor';
 
 type ErrorResponse = components['schemas']['ErrorResponse'];
 
@@ -50,7 +51,7 @@ function AuthForm({ mode }: { mode: 'login' | 'register' }) {
 
   return (
     <main className={`relative overflow-hidden bg-forest ${HEADER_OFFSET}`}>
-      <img src={photo('daun-oranye')} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      <BackdropPhoto src={photo('daun-oranye')} className="absolute inset-0 h-full w-full" />
       <div className="absolute inset-0 bg-forest/60" aria-hidden="true" />
       <div className="page relative py-14 sm:py-24">
       <div className="mx-auto max-w-lg bg-sage px-6 py-10 sm:px-12 sm:py-14">

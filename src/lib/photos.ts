@@ -1,4 +1,8 @@
-/** Foto dekoratif dari template FoodZero (public/images/foodzero). Foto resep dan artikel tetap dari unggahan admin. */
+/**
+ * Foto dekoratif di public/images/foodzero. Foto ini tidak ikut repo (lisensi template) dan ditambahkan
+ * saat build produksi. Tanpa foto, halaman tetap tampil dengan latar polos atau ikon panci.
+ * Foto resep dan artikel tetap dari unggahan admin.
+ */
 export const photo = (name: string) => `/images/foodzero/${name}.jpg`;
 
 const categoryPhotos: Record<string, string> = {
